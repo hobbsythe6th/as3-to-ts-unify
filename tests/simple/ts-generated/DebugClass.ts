@@ -1,6 +1,5 @@
 import { classBound } from "undefinedclassBound";
 
-
 @classBound
 export class DebugClass {
     private prop1:number;

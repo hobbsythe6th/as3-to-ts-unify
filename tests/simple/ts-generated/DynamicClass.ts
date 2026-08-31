@@ -1,6 +1,8 @@
 import { SubDynamicClass } from "./SubDynamicClass";
-
-	export class DynamicClass
+import { classBound } from "undefinedclassBound";
+	
+@classBound
+export class DynamicClass
 	{
 		constructor(){
 			var myClass:SubDynamicClass = new SubDynamicClass();
@@ -9,6 +11,8 @@ import { SubDynamicClass } from "./SubDynamicClass";
 		}
 	}
 
-	export class SubDynamicClass{
+	
+@classBound
+export class SubDynamicClass{
 
 	}

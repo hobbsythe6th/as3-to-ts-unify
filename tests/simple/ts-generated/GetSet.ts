@@ -1,4 +1,7 @@
- export class GetSet {
+import { classBound } from "undefinedclassBound";
+  
+@classBound
+export class GetSet {
 
     constructor(){
 

@@ -1,12 +1,12 @@
+import { classBound } from "undefinedclassBound";
 ﻿
+@classBound
 export class ForEachSimple
 {
     constructor(){
         var myObj:any = {a:2, b:3, c:40};
-        for  (var __$nflvKey  in myObj)
+        for (value of myObj)
         {
-			this.value =  myObj[__$nflvKey];
-
             console.log(this.value);
         }
     }

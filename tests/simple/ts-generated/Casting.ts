@@ -1,4 +1,7 @@
-import { bound } from "as3-to-ts/src/bound";
+import { bound } from "undefinedbound";
+import { classBound } from "undefinedclassBound";
+
+@classBound
 export class Casting {
 
     constructor(){
@@ -41,4 +44,4 @@ private thisMethodIsInTheClassScope(str:string) {
     }
 }
 
-new Casting()
+new Casting();

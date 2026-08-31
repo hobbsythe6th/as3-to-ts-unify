@@ -1,5 +1,7 @@
 import { SubClass } from "./SubClass";
+import { classBound } from "undefinedclassBound";
 
+@classBound
 export class LoopImport
 {
 	constructor(){

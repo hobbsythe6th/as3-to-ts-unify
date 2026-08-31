@@ -1,4 +1,3 @@
-
 export interface SimpleInterface2
 {
     myFunction(var1?:number, var2?:number):number

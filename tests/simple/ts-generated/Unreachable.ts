@@ -1,7 +1,10 @@
-import { bound } from "as3-to-ts/src/bound";
+import { bound } from "undefinedbound";
+import { classBound } from "undefinedclassBound";
 /**
  * Created by palebluedot on 5/3/17.
  */
+
+@classBound
 export class Unreachable {
     constructor(){
         this.demonstrate();

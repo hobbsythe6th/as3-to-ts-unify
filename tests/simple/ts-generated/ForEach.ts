@@ -1,6 +1,10 @@
+import { classBound } from "undefinedclassBound";
 /**
  * Created by palebluedot on 4/24/17.
  */
+
+
+@classBound
 export class ForEach {
     constructor(){
 
@@ -9,9 +13,7 @@ export class ForEach {
         strings.push('beer');
         strings.push('cats');
         strings.push('nature');
-        for (var __$nflvKey  in strings) {
-			var str:string = <string> strings[__$nflvKey];
-
+        for(var str of strings) {
             console.log("a string: " + str);
         }
         // for(var str1:String in strings) {
@@ -44,4 +46,4 @@ export class ForEach {
 //     }
 // }
 
-new ForEach()
+new ForEach();

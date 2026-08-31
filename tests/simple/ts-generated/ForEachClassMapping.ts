@@ -1,6 +1,8 @@
 import { MappedClass } from "./MappedClass";
-import { bound } from "as3-to-ts/src/bound";
+import { classBound } from "undefinedclassBound";
+import { bound } from "undefinedbound";
 
+@classBound
 export class ForEachClassMapping
 {
 	constructor(){
@@ -11,10 +13,8 @@ export class ForEachClassMapping
 		myObj.b = b;
 		var c:MappedClass = new MappedClass("c");
 		myObj.c = c;
-		for  (var __$nflvKey  in myObj)
+		for (var value of myObj)
 		{
-			var value:MappedClass = <MappedClass> myObj[__$nflvKey];
-
 			console.log(value);
 		}
 	}

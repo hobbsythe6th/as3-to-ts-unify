@@ -1,4 +1,8 @@
-import { bound } from "as3-to-ts/src/bound";
+import { bound } from "undefinedbound";
+import { classBound } from "undefinedclassBound";
+
+
+@classBound
 export class Being {
     public name:string;
     private _happiness:string;
@@ -19,6 +23,8 @@ public be():void {
     }
 }
 
+
+@classBound
 export class Animal extends Being {
     constructor(){
         super();
@@ -36,6 +42,8 @@ protected breathe():void {
     }
 }
 
+
+@classBound
 export class Snake extends Animal {
     constructor(){
         super();
