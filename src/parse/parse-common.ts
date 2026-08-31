@@ -9,9 +9,10 @@ import {parseStatement} from './parse-statements';
 import {parseExpression} from './parse-expressions';
 import {parseOptionalType} from './parse-types';
 import {ReportFlags} from '../reports/report-flags';
+import {skipAllDocumentation} from './parse-literals';
 
 
-export function parseQualifiedName(parser:AS3Parser, skipPackage:boolean):string {
+export function parseQualifiedName(parser:AS3Parser):string {
     let buffer = '';
 
     buffer += parser.tok.text;
@@ -23,10 +24,11 @@ export function parseQualifiedName(parser:AS3Parser, skipPackage:boolean):string
         nextToken(parser); // name
     }
 
-    if (skipPackage) {
-        return buffer.substring(buffer.lastIndexOf(Operators.DOT) + 1);
-    }
     return buffer;
+}
+
+export function removePackageFromName(name:string):string {
+    return name.substring(name.lastIndexOf(Operators.DOT) + 1);
 }
 
 
@@ -54,8 +56,10 @@ export function parseBlock(parser:AS3Parser, result?:Node):Node {
             console.log("parseBlock() - iter");
         }
         if (startsWith(parser.tok.text, MULTIPLE_LINES_COMMENT)) {
-            parser.currentFunctionNode.children.push(
-                createNode(NodeKind.MULTI_LINE_COMMENT, {tok: parser.tok}));
+            if (parser.currentFunctionNode != null) {   // 'currentFunctionNode' will be 'null' if not parsing a standard function
+                parser.currentFunctionNode.children.push(
+                    createNode(NodeKind.MULTI_LINE_COMMENT, {tok: parser.tok}));
+            }
             nextToken(parser);
         } else {
             result.children.push(parseStatement(parser));
@@ -70,8 +74,10 @@ export function parseParameterList(parser:AS3Parser):Node {
     let tok = consume(parser, Operators.LEFT_PARENTHESIS);
 
     let result:Node = createNode(NodeKind.PARAMETER_LIST, {start: tok.index});
+    skipAllDocumentation(parser);
     while (!tokIs(parser, Operators.RIGHT_PARENTHESIS)) {
         result.children.push(parseParameter(parser));
+        skipAllDocumentation(parser);
         if (tokIs(parser, Operators.COMMA)) {
             nextToken(parser, true);
         } else {
@@ -110,6 +116,7 @@ export function parseNameTypeInit(parser:AS3Parser):Node {
     result.children.push(createNode(NodeKind.NAME, {tok: parser.tok}));
     nextToken(parser, true); // name
     result.children.push(parseOptionalType(parser));
+    skipAllDocumentation(parser);
     result.children.push(parseOptionalInit(parser));
     result.end = result.children.reduce((index:number, child:Node) => {
         return Math.max(index, child ? child.end : 0);
@@ -126,8 +133,8 @@ export function parseNameTypeInit(parser:AS3Parser):Node {
 function parseOptionalInit(parser:AS3Parser):Node {
     let result:Node = null;
     if (tokIs(parser, Operators.EQUAL)) {
-        nextToken(parser, true);
         let index = parser.tok.index;
+        nextToken(parser, true);
         let expr = parseExpression(parser);
         result = createNode(NodeKind.INIT, {start: index, end: expr.end}, expr);
     }

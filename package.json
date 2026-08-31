@@ -4,7 +4,8 @@
   "description": "Tool to help porting ActionScript 3.0 code to TypeScript.",
   "main": "./lib/index.js",
   "bin": {
-    "as3-to-ts": "./bin/as3-to-typescript"
+    "as3-to-ts": "./bin/as3-to-typescript",
+    "as3-to-ts-sf": "./bin/as3-to-typescript-singleFile"
   },
   "scripts": {
     "rimraf": "rimraf",
@@ -29,6 +30,7 @@
     "typescript",
     "compiler"
   ],
+  "publishConfig": {
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"
   },

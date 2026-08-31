@@ -86,10 +86,9 @@ export function run(): void {
     // get class definitions by namespace
     let definitionsByNamespace: {[ns: string]: string[]} = {};
     files.forEach(file => {
-        let segments = file.match(/([a-zA-Z]+)/g);
-        segments.pop();
+        let segments = file.split(path.sep);
 
-        let identifier = segments.pop();
+        let identifier = path.parse(segments.pop()).name
         let ns = segments.join(".");
 
         if (!definitionsByNamespace[ ns ]) {
@@ -122,7 +121,14 @@ export function run(): void {
             }
         }
 
-        let content = fs.readFileSync(inputFile, 'UTF-8');
+        let content = fs.readFileSync(inputFile, 'UTF-8').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/ {4}/g, '\t');
+
+        visitors.forEach((visitor: CustomVisitor) => {
+            if (visitor.preProcessing) {
+                content = visitor.preProcessing(emitterOptions, content, inputFile);
+            }
+        });
+
         let ast = parse(path.basename(file), content);
         let contents = emit(ast, content, emitterOptions);
 
@@ -132,10 +138,112 @@ export function run(): void {
             }
         })
 
-        fs.outputFileSync(outputFile, contents.replace(/\r\n/g, "\n"));
+        fs.outputFileSync(outputFile, contents);
         fs.utimesSync(outputFile, nextLockTimestamp, nextLockTimestamp);
         number ++;
     });
 
     updateLockTimestamp(outputDir, nextLockTimestamp);
+}
+
+export function runSingleFile(): void {
+    let args = parseArgs(process.argv, { '--': true });
+
+    if (args._.length === 2) {
+        console.log('usage: as3-to-typescriptSingleFile <sourceFile> <outputFile> [options]');
+        console.log('');
+        console.log('   Available options:');
+        console.log('       --commonjs: ignore AS3 packages on TypeScript output.');
+        console.log('       --visitors: use custom a output visitor. (--visitors dictionary,createjs)');
+        console.log('       --interactive: ask to write the output in case it was manually modified');
+        console.log('       --overwrite: overwrite output files');
+        console.log('');
+        process.exit(0);
+    }
+
+    if (args._.length !== 4) {
+        throw new Error('source file and output file are mandatory');
+    }
+
+    let sourceFile = path.resolve(process.cwd(), args._[2]);
+    if (!fs.existsSync(sourceFile) || fs.statSync(sourceFile).isDirectory()) {
+        throw new Error('invalid source file');
+    }
+
+    let outputFile = path.resolve(process.cwd(), args._[3]);
+    if (fs.existsSync(outputFile)) {
+        if (fs.statSync(outputFile).isDirectory()) {
+            throw new Error('invalid ouput file');
+        }
+    }
+
+    let visitors = (args['visitors'])
+        ? args['visitors'].split(",").map((name: string) => require(`./custom-visitors/${name}`).default)
+        : []
+    let overwrite = !!args['overwrite'];
+    let commonjs = args['commonjs'];
+    let interactive = args['interactive'];
+
+    if (overwrite && interactive) {
+        console.error("You can't have '--overwrite' and '--interactive' at the same time.");
+        process.exit();
+    }
+
+    // get last conversion timestamp
+    let previousLockTimestamp = getLockTimestamp(outputFile);
+    let nextLockTimestamp = Math.floor((new Date()).getTime() / 1000);
+
+    // get class definitions by namespace
+    let definitionsByNamespace: {[ns: string]: string[]} = {};
+    [sourceFile].forEach(file => {
+        let segments = file.match(/([a-zA-Z]+)/g);
+        segments.pop();
+
+        let identifier = segments.pop();
+        let ns = segments.join(".");
+
+        if (!definitionsByNamespace[ ns ]) {
+            definitionsByNamespace[ ns ] = [ ];
+        }
+
+        definitionsByNamespace[ ns ].push( identifier );
+    });
+
+    let emitterOptions: EmitterOptions = {
+        lineSeparator: '\n',
+        useNamespaces: !commonjs,
+        customVisitors: visitors,
+        definitionsByNamespace: definitionsByNamespace
+    };
+
+    console.log('(1/1)\'' + sourceFile + '\'');
+
+    if (!overwrite && fs.existsSync(outputFile)) {
+        let stat = fs.statSync(outputFile);
+        if (previousLockTimestamp.getTime() !== stat.mtime.getTime()) {
+            if (interactive && !readlineSync.keyInYN(`"${ outputFile }" has been modified. Overwrite it?`)) {
+                return;
+            }
+        }
+    }
+
+    let content = fs.readFileSync(sourceFile, 'UTF-8').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/ {4}/g, '\t');
+
+    visitors.forEach((visitor: CustomVisitor) => {
+        if (visitor.preProcessing) {
+            content = visitor.preProcessing(emitterOptions, content, sourceFile);
+        }
+    });
+
+    let ast = parse(path.basename(sourceFile), content);
+    let contents = emit(ast, content, emitterOptions);
+
+    visitors.forEach((visitor: CustomVisitor) => {
+        if (visitor.postProcessing) {
+            contents = visitor.postProcessing(emitterOptions, contents);
+        }
+    });
+
+    fs.outputFileSync(outputFile, contents);
+    fs.utimesSync(outputFile, nextLockTimestamp, nextLockTimestamp);
 }

@@ -14,7 +14,6 @@ function visit (emitter: Emitter, node: Node): boolean {
 }
 
 function postProcessing (emitterOptions: EmitterOptions, contents: string): string {
-
     //fix all import statements by removing ".." from the beginning
     contents = contents.replace(/import { ([a-zA-Z]+) } from "..\//g, "import {$1} from \".\/");
     

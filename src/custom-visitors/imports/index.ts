@@ -14,7 +14,6 @@ function visit (emitter: Emitter, node: Node): boolean {
 }
 
 function postProcessing (emitterOptions: EmitterOptions, contents: string): string {
-
     //fix import statements for flash package:
     contents = contents.replace(/import {([ 0-9a-zA-Z]+)} from "[.\/]+flash[^"]+";?/gm, "import {$1} from \"@as3web/flash\"");
 
@@ -45,24 +44,18 @@ function postProcessing (emitterOptions: EmitterOptions, contents: string): stri
             // remove the import statement in a tmp string
             let contents_tmp = contents.replace(oneImport, "");
 
-            //console.log(importname);
-
             // check if the import is still in the content
             // (that means the import was there 2 times, and we can just forget about this one)
             if(contents_tmp.match(oneImport)!=null){
-                //console.log("       import statement is found in file more than once.");
                 contents = contents_tmp;
             }
             else{
                 // check if the Classname is ever used inside the content.
                 let regexName=new RegExp("[^0-9a-zA-Z]+"+importname.replace(/\s+/g, '')+"+[^0-9a-zA-Z]", "gm");
-                //console.log(contents.match(regexName));
                 if(contents_tmp.match(regexName)==null || contents_tmp.match(regexName).length==0){
-                    //console.log("       import statement is not used in file.");
                     contents = contents_tmp;
                 }
             }
-            //console.log(contents.match(regexName).length, importname);
         });
     }
 

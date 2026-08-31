@@ -7,7 +7,6 @@ import {VERBOSE_MASK, WARNINGS} from '../config';
 import {ReportFlags} from '../reports/report-flags';
 
 export default function parse(filePath:string, content:string):Node {
-
     //if(VERBOSE >= 1) {
 
     if((VERBOSE_MASK & ReportFlags.KEY_POINTS) == ReportFlags.KEY_POINTS) {

@@ -3,7 +3,7 @@ import Token from '../parse/token';
 import {VERBOSE_MASK} from '../config';
 import {ReportFlags} from '../reports/report-flags';
 
-interface CreateNodeOptions {
+export interface CreateNodeOptions {
     start?: number;
     end?: number;
     text?: string;
@@ -116,4 +116,12 @@ export default class Node {
         return this.children[this.children.length - 1];
     }
 
+    // returns an array containing all ancestor nodes, in ascending order
+    getParentChain(): Node[] {
+        if (this.parent == null) {
+            return [];
+        } else {
+            return [this.parent].concat(this.parent.getParentChain());
+        }
+    }
 }

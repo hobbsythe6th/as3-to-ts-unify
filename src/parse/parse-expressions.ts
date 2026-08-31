@@ -1,4 +1,4 @@
-import Node, {createNode} from '../syntax/node';
+import Node, {createNode, CreateNodeOptions} from '../syntax/node';
 import NodeKind from '../syntax/nodeKind';
 import * as Keywords from '../syntax/keywords';
 import * as Operators from '../syntax/operators';
@@ -7,6 +7,8 @@ import {parseParameterList, parseBlock} from './parse-common';
 import {parseOptionalType, parseVector} from './parse-types';
 import {parseArrayLiteral, parseObjectLiteral, parseShortVector} from './parse-literals';
 import {VERBOSE_MASK} from '../config';
+import {skipAllDocumentation} from './parse-literals';
+import * as assert from 'assert';
 import {ReportFlags} from '../reports/report-flags';
 
 export function parseExpressionList(parser:AS3Parser):Node {
@@ -46,7 +48,10 @@ export function parsePrimaryExpression(parser:AS3Parser):Node {
     } else if (tokIs(parser, Operators.LEFT_PARENTHESIS)) {
         return parseEncapsulatedExpression(parser);
     } else if (parser.tok.text === VECTOR) {
-        return parseVector(parser);
+        let res = tryParse(parser, () => parseVector(parser));
+        if (res) {
+            return res;
+        }
     } else if (tokIs(parser, Operators.INFERIOR)) {
         let res = tryParse(parser, () => parseShortVector(parser));
         if (res) {
@@ -71,7 +76,6 @@ export function parsePrimaryExpression(parser:AS3Parser):Node {
 
         // Transpile identifier to JavaScript equivalent if it's a keyword.
         if (result.text === Keywords.INT || result.text === Keywords.UINT) {
-            // console.log("That's a INT/UINT: ", result);
             result.text = "Number";
         }
     }
@@ -135,6 +139,7 @@ function parseEncapsulatedExpression(parser:AS3Parser):Node {
 
     let tok = consume(parser, Operators.LEFT_PARENTHESIS);
     let result:Node = createNode(NodeKind.ENCAPSULATED, {start: tok.index});
+    skipAllDocumentation(parser);
     result.children.push(parseExpressionList(parser));
     tok = consume(parser, Operators.RIGHT_PARENTHESIS);
     result.end = tok.end;
@@ -151,7 +156,9 @@ function parseAssignmentExpression(parser:AS3Parser):Node {
     || tokIs(parser, Operators.PLUS_EQUAL) || tokIs(parser, Operators.MINUS_EQUAL)
     || tokIs(parser, Operators.TIMES_EQUAL) || tokIs(parser, Operators.DIVIDED_EQUAL)
     || tokIs(parser, Operators.MODULO_EQUAL) || tokIs(parser, Operators.AND_EQUAL) || tokIs(parser, Operators.OR_EQUAL)
-    || tokIs(parser, Operators.XOR_EQUAL)) {
+    || tokIs(parser, Operators.XOR_EQUAL)
+    || tokIs(parser, Operators.LEFT_SHIFT_EQUAL) || tokIs(parser, Operators.RIGHT_SHIFT_EQUAL) || tokIs(parser, Operators.UNSIGNED_RIGHT_SHIFT_EQUAL)
+    || tokIs(parser, Operators.DOUBLE_AND_EQUAL) || tokIs(parser, Operators.DOUBLE_OR_EQUAL)) {
         result.children.push(createNode(NodeKind.OP, {tok: parser.tok}));
         nextToken(parser, true);
         result.children.push(parseExpression(parser));
@@ -278,10 +285,12 @@ function parseRelationalExpression(parser:AS3Parser):Node {
     || tokIs(parser, Operators.SUPERIOR_AS2) || tokIs(parser, Operators.SUPERIOR_OR_EQUAL)
     || tokIs(parser, Operators.SUPERIOR_OR_EQUAL_AS2) || tokIs(parser, Keywords.IS) || tokIs(parser, Keywords.IN)
     && !parser.isInFor || tokIs(parser, Keywords.AS) || tokIs(parser, Keywords.INSTANCE_OF)) {
-        if (!tokIs(parser, Keywords.AS)) {
-            result.children.push(createNode(NodeKind.OP, {tok: parser.tok}));
-        } else {
+        if (tokIs(parser, Keywords.AS)) {
             result.children.push(createNode(NodeKind.AS, {tok: parser.tok}));
+        } else if (tokIs(parser, Keywords.IS)) {
+            result.children.push(createNode(NodeKind.IS, {tok: parser.tok}));
+        } else {
+            result.children.push(createNode(NodeKind.OP, {tok: parser.tok}));
         }
         nextToken(parser, true);
         result.children.push(parseShiftExpression(parser));
@@ -348,21 +357,25 @@ function parseUnaryExpression(parser:AS3Parser):Node {
     let result:Node,
         index = parser.tok.index;
     if (tokIs(parser, Operators.INCREMENT)) {
+        let start = parser.tok.index;
         nextToken(parser);
-        result = createNode(NodeKind.PRE_INC, {start: parser.tok.index, end: index}, parseUnaryExpression(parser));
+        result = createNode(NodeKind.PRE_INC, {start: start, end: index}, parseUnaryExpression(parser));
     } else if (tokIs(parser, Operators.DECREMENT)) {
+        let start = parser.tok.index;
         nextToken(parser);
-        result = createNode(NodeKind.PRE_DEC, {start: parser.tok.index, end: index}, parseUnaryExpression(parser));
+        result = createNode(NodeKind.PRE_DEC, {start: start, end: index}, parseUnaryExpression(parser));
     } else if (tokIs(parser, Operators.MINUS)) {
+        let start = parser.tok.index;
         nextToken(parser);
-        result = createNode(NodeKind.MINUS, {start: parser.tok.index, end: index}, parseUnaryExpression(parser));
+        result = createNode(NodeKind.MINUS, {start: start, end: index}, parseUnaryExpression(parser));
     //
     // Having PLUS_AS2 emits wrong AST when a method is called "add"
     // } else if (tokIs(parser, Operators.PLUS) || tokIs(parser, Operators.PLUS_AS2)) {
     //
     } else if (tokIs(parser, Operators.PLUS)) {
+        let start = parser.tok.index;
         nextToken(parser);
-        result = createNode(NodeKind.PLUS, {start: parser.tok.index, end: index}, parseUnaryExpression(parser));
+        result = createNode(NodeKind.PLUS, {start: start, end: index}, parseUnaryExpression(parser));
     } else {
         return parseUnaryExpressionNotPlusMinus(parser);
     }
@@ -375,8 +388,20 @@ function parseUnaryExpressionNotPlusMinus(parser:AS3Parser):Node {
     let index = parser.tok.index;
     if (tokIs(parser, Keywords.DELETE)) {
         nextToken(parser, true);
+        let encapsulated = false;
+        if (tokIs(parser, Operators.LEFT_PARENTHESIS)) {
+            nextToken(parser, true);
+            encapsulated = true;
+        }
         let expr = parseExpression(parser);
-        result = createNode(NodeKind.DELETE, {start: index, end: expr.end}, expr);
+        let end = expr.end;
+        if (encapsulated) {
+            assert(tokIs(parser, Operators.RIGHT_PARENTHESIS), 'Expected encapsulated DELETE to end with parenthesis.');
+            end = parser.tok.end;
+            nextToken(parser, true);
+        }
+        result = createNode(NodeKind.DELETE, {start: index, end: end}, expr);
+        
     } else if (tokIs(parser, Keywords.VOID)) {
         nextToken(parser, true);
         let expr = parseExpression(parser);
@@ -413,18 +438,17 @@ function parseUnaryPostfixExpression(parser:AS3Parser):Node {
 
 
 function parseIncrement(parser:AS3Parser, node:Node):Node {
-    nextToken(parser, true);
     let result:Node = createNode(NodeKind.POST_INC, {start: node.start, end: parser.tok.end});
+    nextToken(parser, true);
     result.children.push(node);
     return result;
 }
 
 
 function parseDecrement(parser:AS3Parser, node:Node):Node {
-    nextToken(parser, true);
     let result:Node = createNode(NodeKind.POST_DEC, {start: node.start, end: parser.tok.end});
+    nextToken(parser, true);
     result.children.push(node);
-    result.end = node.end;
     return result;
 }
 
@@ -435,8 +459,7 @@ function parseAccessExpression(parser:AS3Parser):Node {
     while (true) {
         if (tokIs(parser, Operators.LEFT_PARENTHESIS)) {
             node = parseFunctionCall(parser, node);
-        }
-        if (tokIs(parser, Operators.DOT) || tokIs(parser, Operators.DOUBLE_COLUMN)) {
+        } else if (tokIs(parser, Operators.DOT) || tokIs(parser, Operators.DOUBLE_COLUMN)) {
             node = parseDot(parser, node);
         } else if (tokIs(parser, Operators.LEFT_SQUARE_BRACKET)) {
             node = parseArrayAccessor(parser, node);
@@ -469,32 +492,89 @@ function parseFunctionCall(parser:AS3Parser, node:Node):Node {
 function parseArgumentList(parser:AS3Parser):Node {
     let tok = consume(parser, Operators.LEFT_PARENTHESIS);
     let result:Node = createNode(NodeKind.ARGUMENTS, {start: tok.index});
+    skipAllDocumentation(parser);
     while (!tokIs(parser, Operators.RIGHT_PARENTHESIS)) {
         result.children.push(parseExpression(parser));
-        skip(parser, Operators.COMMA);
+        skipAllDocumentation(parser);
+        if (tokIs(parser, Operators.COMMA)) {
+            nextToken(parser, true);
+        } else {
+            break;
+        }
     }
     tok = consume(parser, Operators.RIGHT_PARENTHESIS);
     result.end = tok.end;
     return result;
 }
 
+function drawNode(node: Node, depth = 0): string {
+    let t = "";
 
+    for (let i = 0; i < depth; i += 1) {
+        t += "  ";
+    }
+
+    t += (node.text || node.kind) + "\n";
+
+    for (const child of node.children) {
+        t += drawNode(child, depth + 1);
+    }
+
+    return t;
+    // return node.text + ': ' +  node.children.map((n) => drawNode(n, depth + 1)).join(', ')
+}
 
 function parseDot(parser:AS3Parser, node:Node):Node {
     nextToken(parser);
     if (tokIs(parser, Operators.LEFT_PARENTHESIS)) {
         nextToken(parser);
-        let result:Node = createNode(NodeKind.E4X_FILTER, {start: parser.tok.index});
+        let result = createNode(NodeKind.E4X_FILTER, {start: parser.tok.index});
         result.children.push(node);
         result.children.push(parseExpression(parser));
+        skipAllDocumentation(parser);
         result.end = consume(parser, Operators.RIGHT_PARENTHESIS).end;
+        // console.log('FILTER:', drawNode(result));
         return result;
     } else if (tokIs(parser, Operators.TIMES)) {
-        let result:Node = createNode(NodeKind.E4X_STAR, {start: parser.tok.index});
+        let result = createNode(NodeKind.E4X_STAR, {start: parser.tok.index});
         result.children.push(node);
-        result.end = node.end;
+        result.end = consume(parser, Operators.TIMES).end;
+        return result;
+    } else if (parser.tok.text.startsWith(Operators.AT)) {
+        let createNodeOptions: CreateNodeOptions;
+        
+        if (tokIs(parser, Operators.AT)) {
+            nextToken(parser, true);
+            if (tokIs(parser, Operators.LEFT_SQUARE_BRACKET)) {
+                nextToken(parser, true);
+                let result = createNode(NodeKind.E4X_ATTR_ARRAY_ACCESS, {start: node.start});
+                result.children.push(node);
+                result.children.push(parseExpression(parser));
+                result.end = consume(parser, Operators.RIGHT_SQUARE_BRACKET).end;
+                return result;
+            } else if (tokIs(parser, Operators.TIMES)) {
+                createNodeOptions = {
+                    start: parser.tok.index,
+                    text: Operators.TIMES
+                };
+            } else {
+                assert(false);
+            }
+        } else {
+            createNodeOptions = {
+                start: parser.tok.index + 1,
+                text: parser.tok.text.slice(1)
+            };
+        }
+        
+        let result = createNode(NodeKind.E4X_ATTR, {start: node.start});
+        result.children.push(node);
+        result.children.push(createNode(NodeKind.LITERAL, createNodeOptions));
+        result.end = parser.tok.end;
+        nextToken(parser, true);
         return result;
     }
+
     let result:Node = createNode(NodeKind.DOT, {start: node.start});
     result.children.push(node);
     result.children.push(createNode(NodeKind.LITERAL, {tok: parser.tok}));
@@ -509,11 +589,9 @@ function parseDot(parser:AS3Parser, node:Node):Node {
 function parseArrayAccessor(parser:AS3Parser, node:Node):Node {
     let result:Node = createNode(NodeKind.ARRAY_ACCESSOR, {start: node.start});
     result.children.push(node);
-    while (tokIs(parser, Operators.LEFT_SQUARE_BRACKET)) {
-        nextToken(parser, true);
-        result.children.push(parseExpression(parser));
-        result.end = consume(parser, Operators.RIGHT_SQUARE_BRACKET).end;
-    }
+    consume(parser, Operators.LEFT_SQUARE_BRACKET);
+    result.children.push(parseExpression(parser));
+    result.end = consume(parser, Operators.RIGHT_SQUARE_BRACKET).end;
     return result;
 }
 

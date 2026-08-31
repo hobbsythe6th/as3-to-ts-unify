@@ -5,9 +5,11 @@ import * as Operators from '../syntax/operators'
 import Token from './token';
 import AS3Parser, {nextToken, nextTokenAllowNewLine, tryParse, consume, skip, tokIs} from './parser';
 import {parseExpressionList, parseExpression, parsePrimaryExpression} from './parse-expressions';
-import {parseVarList, parseConstList} from './parse-declarations';
+import {parseVarList, parseConstList, parseImport} from './parse-declarations';
 import {parseBlock, parseNameTypeInit} from './parse-common';
-import {NEW_LINE} from './parser';
+import {NEW_LINE, MULTIPLE_LINES_COMMENT} from './parser';
+import {startsWith} from '../string';
+import {skipAllDocumentation} from './parse-literals';
 
 
 export function parseStatement(parser:AS3Parser):Node {
@@ -43,6 +45,8 @@ export function parseStatement(parser:AS3Parser):Node {
         result = parseBreakOrContinueStatement(parser);
     } else if (tokIs(parser, Operators.SEMI_COLUMN)) {
         result = parseEmptyStatement(parser);
+    } else if (tokIs(parser, Keywords.IMPORT)) {
+        result = parseImport(parser);
     } else {
         result = parseExpressionList(parser);
         skip(parser, Operators.SEMI_COLUMN);
@@ -132,6 +136,7 @@ function parseForIn(parser:AS3Parser, result:Node):Node {
     result.children.push(createNode(NodeKind.IN, {start: index, end: expr.end}, expr));
     result.kind = NodeKind.FORIN;
     consume(parser, Operators.RIGHT_PARENTHESIS);
+    result.children.push(parseStatement(parser));
     return result;
 }
 
@@ -155,7 +160,7 @@ function parseSwitch(parser:AS3Parser):Node {
     let tok = consume(parser, Keywords.SWITCH);
     let result:Node = createNode(NodeKind.SWITCH, {start: tok.index, end: tok.end}, parseCondition(parser));
     if (tokIs(parser, Operators.LEFT_CURLY_BRACKET)) {
-        nextToken(parser);
+        nextToken(parser, true);
         result.children.push(parseSwitchCases(parser));
         result.end = consume(parser, Operators.RIGHT_CURLY_BRACKET).end;
     }
@@ -202,7 +207,11 @@ function parseSwitchCases(parser:AS3Parser):Node {
 function parseSwitchBlock(parser:AS3Parser):Node {
     let result:Node = createNode(NodeKind.SWITCH_BLOCK, {start: parser.tok.index, end: parser.tok.end});
     while (!tokIs(parser, Keywords.CASE) && !tokIs(parser, Keywords.DEFAULT) && !tokIs(parser, Operators.RIGHT_CURLY_BRACKET)) {
-        result.children.push(parseStatement(parser));
+        if (startsWith(parser.tok.text, MULTIPLE_LINES_COMMENT)) {
+            nextToken(parser);
+        } else {
+            result.children.push(parseStatement(parser));
+        }
     }
     result.end = result.children.reduce((index:number, child:Node) => {
         return Math.max(index, child ? child.end : 0);
@@ -369,6 +378,7 @@ function parseEmptyStatement(parser:AS3Parser):Node {
 
 function parseCondition(parser:AS3Parser):Node {
     let tok = consume(parser, Operators.LEFT_PARENTHESIS);
+    skipAllDocumentation(parser);
     let result:Node = createNode(NodeKind.CONDITION, {start: tok.index}, parseExpression(parser));
     tok = consume(parser, Operators.RIGHT_PARENTHESIS);
     result.end = tok.end;

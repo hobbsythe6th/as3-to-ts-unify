@@ -57,15 +57,9 @@ export let FALSE = 'false';
 export let NULL = 'null';
 export let THIS = 'this';
 
-let keywordsCheck: { [index: string]: boolean } =
-    Object.keys(exports).reduce(
-        (result, key) => {
-            let keyword: string = exports[key];
-            result[keyword] = true;
-            return result;
-        },
-        {} as { [index: string]: boolean });
+let keywords: Set<string> =
+    new Set(Object.keys(exports).filter(exportedName => exportedName !== 'isKeyWord').map(exportedName => exports[exportedName]));
 
 export function isKeyWord(text: string): boolean {
-    return !!keywordsCheck[text];
+    return keywords.has(text);
 }

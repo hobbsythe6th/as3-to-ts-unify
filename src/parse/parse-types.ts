@@ -2,7 +2,7 @@ import Node, {createNode} from '../syntax/node';
 import NodeKind from '../syntax/nodeKind';
 import * as Operators from '../syntax/operators';
 import AS3Parser, {nextToken, consume, tokIs, VECTOR} from './parser';
-import {parseQualifiedName} from './parse-common';
+import {parseQualifiedName, removePackageFromName} from './parse-common';
 
 
 /**
@@ -23,8 +23,8 @@ export function parseType(parser:AS3Parser):Node {
         result = parseVector(parser);
     } else {
         let index = parser.tok.index;
-        let name = parseQualifiedName(parser, true);
-        result = createNode(NodeKind.TYPE, {start: index, text: name});
+        let name = parseQualifiedName(parser);
+        result = createNode(NodeKind.TYPE, {start: index, end: index + name.length, text: removePackageFromName(name)});
         // nextToken(parser,  true );
     }
     return result;

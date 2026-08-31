@@ -38,7 +38,7 @@ import {startsWith} from '../string';
 export const ASDOC_COMMENT = '/**';
 export const MULTIPLE_LINES_COMMENT = '/*';
 export const NEW_LINE = '\n';
-const SINGLE_LINE_COMMENT = '//';
+export const SINGLE_LINE_COMMENT = '//';
 export const VECTOR = 'Vector';
 
 /**
@@ -69,10 +69,23 @@ export function nextToken(parser:AS3Parser, ignoreDocumentation:boolean = false)
 
 export function tryParse<T>(parser:AS3Parser, func:() => T):T {
     let checkPoint = parser.scn.getCheckPoint();
+    let tok = parser.tok;
+    let currentAsDoc = parser.currentAsDoc;
+    let currentFunctionNode = parser.currentFunctionNode;
+    let currentMultiLineComment = parser.currentMultiLineComment;
+    let isInFor = parser.isInFor;
+
     try {
         return func();
     } catch (e) {
+        // restore the state of the parser *before* the attempt to run 'func' was made
         parser.scn.rewind(checkPoint);
+        parser.tok = tok;
+        parser.currentAsDoc = currentAsDoc;
+        parser.currentFunctionNode = currentFunctionNode;
+        parser.currentMultiLineComment = currentMultiLineComment;
+        parser.isInFor = isInFor;
+
         return null;
     }
 }

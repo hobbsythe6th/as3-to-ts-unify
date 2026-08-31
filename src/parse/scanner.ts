@@ -215,7 +215,6 @@ function nextToken(scanner: AS3Scanner): Token {
     if(AUTO_INSERT_SEMICOLONS && scanner.missedSemi) {
         // insert semicolon
         // TODO: this is successfully detected, but the insertion doesn not work
-        // console.log(">>> [INSERT SEMICOLON] <<<");
         // scanner.queuedToken = scanner.createToken(";\n", {skip: true});
     }
 
@@ -252,9 +251,9 @@ function nextToken(scanner: AS3Scanner): Token {
         case '%':
             return scanCharacterSequence(scanner, currentCharacter, ['%=']);
         case '&':
-            return scanCharacterSequence(scanner, currentCharacter, ['&&', '&=']);
+            return scanCharacterSequence(scanner, currentCharacter, ['&&', '&=', '&&=']);
         case '|':
-            return scanCharacterSequence(scanner, currentCharacter, ['||', '|=']);
+            return scanCharacterSequence(scanner, currentCharacter, ['||', '|=', '||=']);
         case '^':
             return scanCharacterSequence(scanner, currentCharacter, ['^=']);
         case '>':
@@ -313,6 +312,7 @@ function scanRegExp(scanner: AS3Scanner): Token {
 
         if (flags.length) {
             token.text += flags;
+            token.end += flags.length;
             scanner.index += flags.length;
         }
 
@@ -372,7 +372,7 @@ function scanDecimal(scanner: AS3Scanner, currentCharacter: string): Token {
             currentChar = scanner.peekChar(peekPos++);
         }
 
-        if (currentChar === 'E') {
+        if (currentChar === 'E' || currentChar === 'e') {
             buffer += currentChar;
             currentChar = scanner.peekChar(peekPos++);
             while (/\d/.test(currentChar)) {
@@ -437,7 +437,7 @@ function scanMultiLineComment(scanner: AS3Scanner): Token {
     }
     while (currentCharacter && (previousCharacter !== '*' || currentCharacter !== '/'));
 
-    return scanner.createToken(buffer, {skip: false});
+    return scanner.createToken(buffer, {index: scanner.index + 1 - buffer.length, skip: false});
 }
 
 
@@ -475,9 +475,16 @@ function scanSingleLineComment(scanner: AS3Scanner): Token {
         char = scanner.nextChar();
         buffer += char;
     }
-    while (!isNewLineChar(char));
+    while ((!isNewLineChar(char)) && (scanner.index < scanner.content.length));
 
-    return scanner.createToken(buffer, {skip: false});
+    // if we've reached the end of the file then 'scanner.index' points to the end of the file,
+    // otherwise it points to the last character of the comment
+    let lastCharacterOfComment = (scanner.index < scanner.content.length) ? scanner.index : scanner.index - 1;
+
+    return scanner.createToken(buffer, {
+        index: (lastCharacterOfComment + 1) - buffer.length,
+        skip: false
+    });
 }
 
 
@@ -485,14 +492,14 @@ function scanSingleLineComment(scanner: AS3Scanner): Token {
  * Something started with a quote or number quote consume characters until
  * the quote/double quote shows up again and is not escaped
  */
-function scanUntilDelimiter(scanner: AS3Scanner, start: string, delimiter: string = start): Token {
+function scanUntilDelimiter(scanner: AS3Scanner, start: string, delimiter: string = start, allowNewLines: boolean = false): Token {
     let buffer = start;
     let peekPos = 1;
     let numberOfBackslashes = 0;
 
     while (peekPos < scanner.content.length) {
         let currentCharacter: string = scanner.peekChar(peekPos++);
-        if (isNewLineChar(currentCharacter) || (scanner.index + peekPos >= scanner.content.length)) {
+        if ((!allowNewLines && isNewLineChar(currentCharacter)) || (scanner.index + peekPos >= scanner.content.length)) {
             return null;
         }
         buffer += currentCharacter;
@@ -558,7 +565,7 @@ function scanXML(scanner: AS3Scanner): Token {
     while (true) {
         let currentToken: Token = null;
         do {
-            currentToken = scanUntilDelimiter(scanner, '<', '>');
+            currentToken = scanUntilDelimiter(scanner, '<', '>', true); // allow newlines inside XML tags
             if (currentToken === null) {
                 scanner.index = currentIndex;
                 return null;
@@ -571,14 +578,32 @@ function scanXML(scanner: AS3Scanner): Token {
                     scanner.nextChar();
                 }
                 currentToken = null;
+            } else if (startsWith(currentToken.text, '<!')) {
+                // comment or CDATA block, continue to believe this is well-formed for now
+            } else if (startsWith(currentToken.text, '</')) {
+                // end tag, continue to believe this is well-formed for now
+            } else {
+                // open tag, or empty tag
+
+                // parse this as an empty tag to make sure it actually is a valid XML tag
+                let currentTokenAsEmptyXmlTag = currentToken.text;
+                if (currentTokenAsEmptyXmlTag !== '<>') {   // an unnamed empty tag is the start of an XMLList literal, and is automatically valid
+                    if (!endsWith(currentToken.text, '/>')) {
+                        currentTokenAsEmptyXmlTag = currentToken.text.substring(0, currentToken.text.length - 1) + '/>';
+                    }
+                    if (!verifyXML(currentTokenAsEmptyXmlTag)) {
+                        scanner.index = currentIndex;
+                        return null;
+                    }
+                }
             }
         }
         while (currentToken === null);
 
         if (startsWith(currentToken.text, '</')) {
             level--;
-        } else if (!endsWith(currentToken.text, '/>') &&
-                currentToken.text !== '<>') { // NOT operator in AS2
+        } else if (!endsWith(currentToken.text, '/>')) {
+                // && currentToken.text !== '<>'*/) { // NOT operator in AS2: going to currently ignore this though (and drop some support for AS2), to support XMLList literals, which start with '<>'
             level++;
         }
 
@@ -600,7 +625,21 @@ function scanXML(scanner: AS3Scanner): Token {
 function verifyXML(string: string): boolean {
     let parser = sax.parser(true, {});
     try {
-        parser.write(string).close();
+        // NOTE: this attempt at turning the XML string into a valid XML string by finding and replacing instances of '{some code}' is only a partial solution that works 'well enough' currently,
+        // constructing a use-case where this fails (e.g. code inside the '{}'s that contains a '{') isn't difficult.
+        let stringWithTemplateStringsRemoved =
+            string
+                .replace(/<{[^{}]*}/g, '<someValue')    // replace XML tags that are dynamically calculated with some possible valid value
+                .replace(/{[^{}]*}/g, '"someValue"');    // replace other XML data that is dynamically calculated with some possible valid value
+        
+        // AS3 allows the construction of XMLList literals, which begin with <> and end with </>, and an empty such list is just </>
+        // these will cause the 'sax' parser to choke, but we can make a few small changes to make a valid XMLList literal into a valid XML literal
+        let listOfXmlTurnedIntoXml =
+            stringWithTemplateStringsRemoved
+                .replace(/^<>/, '<wrapper>')        // start of a non-empty list of XML
+                .replace(/<\/>$/, '</wrapper>');    // end of a non-empty list of XML
+
+        parser.write(listOfXmlTurnedIntoXml).close();
         return true;
     } catch (e) {
         return false;
@@ -612,9 +651,15 @@ function verifyXML(string: string): boolean {
  * Something started with a lower sign <
  */
 function scanXMLOrOperator(scanner: AS3Scanner, startingCharacterc: string): Token {
+    let checkPoint = scanner.getCheckPoint();
     let xmlToken = scanXML(scanner);
-    if (xmlToken !== null && verifyXML(xmlToken.text)) {
-        return xmlToken;
+
+    if (xmlToken !== null) {
+        let xmlContent = xmlToken.text;
+        if (verifyXML(xmlContent)) {
+            return xmlToken;
+        }
     }
+    scanner.rewind(checkPoint);
     return scanCharacterSequence(scanner, startingCharacterc, ['<<<=', '<<<', '<<=', '<<', '<=']);
 }
