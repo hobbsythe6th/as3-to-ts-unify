@@ -53,7 +53,7 @@ Options:
 ## Known issues
 
 - `super` calls on constructor need to be moved as the first call after conversion.
-- having a comment on `extends` statement causes infinite loop parsint the `.as` file.
+- having a comment on `extends` statement causes infinite loop parsing the `.as` file.
 - having `break` without a semicolon results in infinite loop parsing the `.as` file.
 - having a method without access level will throw `Error: invalid consume`.
   (usually this is result of bad copy & paste without renaming the class constructor)
