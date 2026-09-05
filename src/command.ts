@@ -57,7 +57,7 @@ export function run(): void {
     let outputDir = path.resolve(process.cwd(), args._[3]);
     if (fs.existsSync(outputDir)) {
         if (!fs.statSync(outputDir).isDirectory()) {
-            throw new Error('invalid ouput dir');
+            throw new Error('invalid output dir');
         }
     } else {
         fs.mkdirSync(outputDir);
@@ -173,7 +173,7 @@ export function runSingleFile(): void {
     let outputFile = path.resolve(process.cwd(), args._[3]);
     if (fs.existsSync(outputFile)) {
         if (fs.statSync(outputFile).isDirectory()) {
-            throw new Error('invalid ouput file');
+            throw new Error('invalid output file');
         }
     }
 
