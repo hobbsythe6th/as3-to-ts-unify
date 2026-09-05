@@ -1,17 +1,28 @@
 {
-  "name": "as3-to-typescript",
-  "version": "0.1.1",
-  "description": "convert as3 code base to typescript",
-  "main": "index.js",
+  "name": "@as3web/as3-to-ts",
+  "version": "0.3.10",
+  "description": "Tool to help porting ActionScript 3.0 code to TypeScript.",
+  "main": "./lib/index.js",
   "bin": {
-    "as3-to-typescript": "./bin/as3-to-typescript"
+    "as3-to-ts": "./bin/as3-to-typescript",
+    "as3-to-ts-sf": "./bin/as3-to-typescript-singleFile"
   },
   "scripts": {
-    "test": "node test/runner generate && node test/runner compare",
-    "generate": "node test/runner generate",
-    "accept": "node test/runner accept",
-    "compile": "tsc --module 'commonjs' --outDir lib --target es5 src/declarations/node.d.ts src/main/parser.ts src/main/emitter.ts src/main/command.ts",
-    "watch": "tsc --module 'commonjs' --outDir lib --target es5 --watch src/declarations/node.d.ts src/main/parser.ts src/main/emitter.ts src/main/command.ts"
+    "rimraf": "rimraf",
+    "typings": "typings install",
+    "pretest": "npm run -s build",
+    "test": "npm run pretest && npm run test:simple && npm run test:compound",
+    "test:simple": "node tests/simple/SimpleTests.js",
+    "test:compound": "node tests/compound/CompoundTests.js",
+    "test:simple:win": "node %NODE_DEBUG_OPTION% tests/simple/SimpleTests.js",
+    "tsc": "tsc",
+    "clean": "npm cache clean && npm run rimraf -- node_modules lib",
+    "clean:dist": "npm run rimraf -- lib",
+    "watch": "npm run tsc -- --w",
+    "prebuild": "npm run clean:dist",
+    "build": "npm run tsc",
+    "version": "npm run build",
+    "postversion": "git push && git push --tags && npm publish"
   },
   "keywords": [
     "actionscript",
@@ -19,24 +30,46 @@
     "typescript",
     "compiler"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git://github.com/fdecampredon/as3-to-typescript.git"
-  },
-  "bugs": {
-    "url": "https://github.com/fdecampredon/as3-to-typescript/issues"
-  },
-  "author": "François de Campredon <francois.de.campredon@gmail.com>",
-  "licenses" : {
-    "type": "Apache",
-    "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+  "publishConfig": {
+    "publishConfig": {
+      "registry": "https://registry.npmjs.org/"
+    },
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/as3web/as3-to-ts.git"
+    },
+    "bugs": {
+      "url": "https://github.com/as3web/as3-to-ts/issues"
+    },
+    "author": "François de Campredon <francois.de.campredon@gmail.com>",
+    "contributors": [
+      {
+        "name": "Endel Dreyer"
+      },
+      {
+        "name": "Simon Buchan"
+      },
+      {
+        "name": "Ushan"
+      }
+    ],
+    "license": "Apache-2.0"
   },
   "dependencies": {
-    "fs-extended": "^0.2.0",
-    "rimraf": "^2.2.8",
+    "colors": "^1.1.2",
+    "fs-extra": "^0.24.0",
+    "minimist": "^1.2.0",
+    "object-assign": "^4.0.1",
+    "readline-sync": "^1.4.4",
     "sax": "~0.6.0"
   },
   "devDependencies": {
-    "typescript": "~1.3.0"
+    "diff": "^2.2.1",
+    "rimraf": "^2.6.1",
+    "sax": "^0.6.1",
+    "source-map-support": "^0.3.2",
+    "tslint": "^2.5.1",
+    "typescript": "^2.4.2",
+    "typings": "^2.1.1"
   }
 }

@@ -1,0 +1,53 @@
+import Node, {createNode} from '../syntax/node';
+import NodeKind from '../syntax/nodeKind';
+import * as Operators from '../syntax/operators';
+import AS3Parser, {nextToken, consume, tokIs, VECTOR} from './parser';
+import {parseQualifiedName, removePackageFromName} from './parse-common';
+
+
+/**
+ * if tok is ":" parse the type otherwise do nothing
+ */
+export function parseOptionalType(parser:AS3Parser):Node {
+    let result:Node = createNode(NodeKind.TYPE, {start: parser.tok.index, end: parser.tok.index});
+    if (tokIs(parser, Operators.COLUMN)) {
+        nextToken(parser, true);
+        result = parseType(parser);
+    }
+    return result;
+}
+
+export function parseType(parser:AS3Parser):Node {
+    let result:Node;
+    if (parser.tok.text === VECTOR) {
+        result = parseVector(parser);
+    } else {
+        let index = parser.tok.index;
+        let name = parseQualifiedName(parser);
+
+        // support the `SomeType[]` array-type suffix syntax
+        if (tokIs(parser, Operators.LEFT_SQUARE_BRACKET)) {
+            nextToken(parser);
+            consume(parser, Operators.RIGHT_SQUARE_BRACKET);
+            name = name + '[]';
+        }
+
+        result = createNode(NodeKind.TYPE, {start: index, end: index + name.length, text: removePackageFromName(name)});
+        // nextToken(parser,  true );
+    }
+    return result;
+}
+
+export function parseVector(parser:AS3Parser):Node {
+    let result:Node = createNode(NodeKind.VECTOR, {start: parser.tok.index});
+    if (parser.tok.text === VECTOR) {
+        nextToken(parser);
+    }
+    consume(parser, Operators.VECTOR_START);
+
+    result.children.push(parseType(parser));
+
+    result.end = consume(parser, Operators.SUPERIOR).end;
+
+    return result;
+}

@@ -1,4 +1,27 @@
-node_modules
-test/fixtures/generated
-test/single
+# compile output, *not* ignored by .npmignore
+/lib
+
+# default .npmignore
+/node_modules
 npm-debug.log
+
+# I'm an IntelliJ duder
+/.idea
+# But i've played with VSCode
+/.vscode
+
+# Tests
+/tests/simple/js-generated
+/tests/compound/js-generated
+/test/fixtures/generated
+/test/generated
+/test/single
+/test-ast/fixtures/generated
+/test-ast/generated
+/test-ast/single
+*.orig
+
+# misc
+/.claude/
+CLAUDE.md
+AGENTS.md
